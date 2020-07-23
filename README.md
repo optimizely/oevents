@@ -1,5 +1,5 @@
 # oevents
-A CLI for accessing exported Optimizely's Enriched Events Export.
+`oevents` is a command line interface (CLI) tool for loading exported Optimizely's Enriched Events Export.
 
 Optimizely [Enriched Events Export](https://docs.developers.optimizely.com/optimizely-data/docs/enriched-events-export) gives you secure access to your Optimizely event data so you can analyze your experiment results with greater flexibility. The export includes a useful combination of events attributes:
 
@@ -8,7 +8,7 @@ Optimizely [Enriched Events Export](https://docs.developers.optimizely.com/optim
 
 For more information, see the Enriched Events [data specification](https://docs.developers.optimizely.com/optimizely-data/docs/enriched-events-data-specification).
 
-This repo contains `oevents`, a CLI tool for loading enriched event data.
+Demo of using `oevents`:
 
 ![oevents demo](./img/demo.gif)
 
