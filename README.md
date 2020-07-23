@@ -20,17 +20,16 @@ Demo of using `oevents`:
 - [curl](https://curl.haxx.se/)  (Note: All versions of OS X starting with Jaguar come with curl installed)
 - the [Amazon AWS CLI](https://aws.amazon.com/cli/) (v2+) 
 
-## Downloading `oevents`
-
-You can download a zipped directory containing the `oevents` CLI [here](https://library.optimizely.com/labs/artifacts/optimizely-data-cli/optimizely-data-cli.zip).
-
-`oevents` lives in the  [Optimizely Labs Github repository](https://github.com/optimizely/labs/tree/master/labs/optimizely-data-cli).  You can also access it by cloning the repository or downloading the `oevents` script directly from the Github web interface.
-
-## Installation
+## Getting Started
 
 1. Clone this repository
 
-2. Make `oevents` executable:
+2. Navigate to the root of this repository:
+```sh
+$ cd oevents
+```
+
+2. Make the `oevents` bash script executable:
 
 `oevents` is a bash script. To run it, you'll need to make sure it's executable.  Assuming `oevents` is in your working directory, you can do this with the following command:
 
