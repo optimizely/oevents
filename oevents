@@ -1,0 +1,636 @@
+#!/usr/bin/env bash
+
+################################################################################
+#                  Optimizely Enriched Event Data Loader CLI                   #
+################################################################################
+
+set -euo pipefail
+
+CLI_NAME="oevents"
+
+usage="$CLI_NAME - a simple CLI for Optimizely Enriched Event Export data
+
+$CLI_NAME can be used to explore Optimizely Enriched Event data and download specific subsets of this dataset.  In general, $CLI_NAME commands take the form:
+
+  $CLI_NAME <command> <args>
+
+The command specifies the action that $CLI_NAME should take, and the arguments specify (among other things) the location of a specific subet of this data.  
+
+commands:
+    help           Display this help message.
+    auth           Retrieve AWS authentication credentials using an Optimizely Personal Access Token.
+    paths          List S3 paths specified by the supplied arguments.
+    ls             List all S3 objects in the paths specified by the supplied arguments.
+    load           Download all data in the paths specified by the supplied arguments.
+
+args:
+    --verbose                     Verbose mode.
+    --bucket <bucket>             The AWS bucket to use. Defaults to optimizely-events-data.
+    --account-id <account_id>     Your Optimizely account ID. This is ignored if a personal access token is specified.
+    --token <token>               Your Optimizely API personal access token.  May also be passed via the
+                                  OPTIMIZELY_API_TOKEN environment variable.  Required if --account-id is not provided.
+    --type <type>                 Should be one of decisions or events.
+    --start <YYYY-MM-DD>          First (and only, if no end is specified) date in your specified range.
+    --date <YYYY-MM-DD>           Equivalent to --start.
+    --end <YYYY-MM-DD>            Last date in your specified range. 
+    --experiment <experiment_id>  An Optimizely experiment ID (only used if type=decisions)
+    --event <event>               An Optimizely event name (only used if type=events)
+    --output <output directory>   Output directory for the load command. Defaults to your working directory. (optional)
+
+## Authentication:
+
+Enriched Event data is served via Amazon S3.  You can authenticate $CLI_NAME to AWS in two ways:
+
+  1. (Recommended) Providing your Optimizely Personal Access Token via the
+     OPTIMIZELY_API_TOKEN environment variable or the --token command line
+     argument. $CLI_NAME will acquire AWS credentials using the Optimizely
+     Authentication API:
+     https://docs.developers.optimizely.com/optimizely-data/docs/authentication-api
+
+  2. Providing your AWS credenitals directly. See
+     https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html
+
+You can use the $CLI_NAME auth command to acquire temporary AWS credentials:
+
+  $ $CLI_NAME auth --token <optimizely personal access token>
+
+  export AWS_ACCESS_KEY_ID=<key id>
+  export AWS_SECRET_ACCESS_KEY=<secret access key>
+  export AWS_SESSION_TOKEN=<session token>
+  export AWS_SESSION_EXPIRATION=1594953226000
+  export S3_BASE_PATH=s3://optimizely-events-data/v1/account_id=12345/
+
+## Argument examples:
+
+Enriched Event data is partitioned according to Optimizely account ID, data type, date, and event name (for type=events) or experiment ID (for type=decisions).  For example, events with the name \"my_custom_event\" collected on 2020-07-15 are stored in the following S3 path:
+
+  s3://optimizely-events-data/v1/account_id=12345/type=events/date=2020-07-15/event=my_custom_event/
+
+See https://docs.developers.optimizely.com/optimizely-data/docs/enriched-events-data-specification for more details on the Enriched Event data specification.
+
+The following examples use the $CLI_NAME paths command to demonstrate how arguments can be used to specify an increasingly specific subset of your enriched event data:
+
+  $ $CLI_NAME paths
+  
+  s3://optimizely-events-data/v1/account_id=12345/
+
+  $ $CLI_NAME paths --type decisions
+
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/
+
+  $ $CLI_NAME paths --type decisions --date 2020-07-01
+
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-01/
+
+  $ $CLI_NAME paths --type decisions --start 2020-07-01 --end 2020-07-05
+
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-01/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-02/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-03/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-04/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-05/
+
+  $ $CLI_NAME paths --type decisions --start 2020-07-01 --end 2020-07-05 --experiment 56789
+
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-01/experiment=56789/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-02/experiment=56789/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-03/experiment=56789/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-04/experiment=56789/
+  s3://optimizely-events-data/v1/account_id=12345/type=decisions/date=2020-07-05/experiment=56789/
+"
+
+################################################################################
+# Logging and Error output                                                     #
+################################################################################
+
+# VerboseEcho
+# Echo the supplied text if the --verbose flag is on
+function VerboseEcho()
+{
+  if [ "$verbose" = true ]; then 
+    echo "$@"
+  fi
+}
+
+# ErrorEcho
+# Echo the supplied text to stderr 
+function ErrorEcho()
+{
+  echo "$@" >&2
+}
+
+################################################################################
+# Prerequisites                                                                #
+################################################################################
+
+function Require()
+{
+  local requirement="$1"
+
+  if ! command -v "$requirement" &> /dev/null; then
+    ErrorEcho "Error: $CLI_NAME requires $requirement to run.  Please install it and try again."
+    exit 1
+  fi
+}
+
+
+################################################################################
+# Date and Time                                                                #
+################################################################################
+
+# TimestampMsToDateString
+# Convert a unix timestamp (in milliseconds) to a date string and return the result
+function TimestampMsToDateString()
+{
+  local timestamp_ms="$1"
+  local timestamp_s=$(( timestamp_ms / 1000 ))
+  if [[ $(uname) = 'Darwin' ]]; then
+    date -r "$timestamp_s"
+  else
+    date -d "@$timestamp_s"
+  fi
+}
+
+# IncrDay
+# Increment a YYYY-MM-DD date string by one day and return the result
+function IncrDay()
+{
+  local to_be_incremented="$1"
+  
+  # From https://stackoverflow.com/questions/25701265/how-to-generate-a-list-of-all-dates-in-a-range-using-the-tools-available-in-bash
+  if [[ $(uname) = 'Darwin' ]]; then
+    date -j -v+1d -f "%Y-%m-%d" "$to_be_incremented" "+%Y-%m-%d"
+  else
+    date -I -d "$to_be_incremented + 1 day"
+  fi
+}
+
+# AssertIsBeforeOrEqual
+# Given two dates, assert that the first is before or equal to the second
+function AssertIsBeforeOrEqual()
+{
+  d1="$1"
+  d2="$2"
+
+  if [[ $(uname) = 'Darwin' ]]; then
+    ts1=$(date -j -u -f "%Y-%m-%d" "$d1" "+%s")
+    ts2=$(date -j -u -f "%Y-%m-%d" "$d2" "+%s")
+  else
+    ts1=$(date -d "$d1" +"%s")
+    ts2=$(date -d "$d2" +"%s")
+  fi
+
+  if [ "$ts1" -gt "$ts2" ]; then
+    ErrorEcho "Error: invalid date range: $d1 - $d2"
+    exit 1
+  fi
+}
+
+# ComputeDateRange
+# Compute a date range between $start and $end, and store the result in $date_range
+function ComputeDateRange()
+{
+  date_range=()
+
+  if [ -z "${start:-}" ]; then
+    return
+  fi
+
+  if [ -z "${end:-}" ]; then
+    end=$start
+  fi
+
+  AssertIsBeforeOrEqual "$start" "$end"
+
+  loopend=$(IncrDay "$end")
+
+  d="$start"
+  while [ "$d" != "$loopend" ]; do 
+    date_range+=("$d")
+    d=$(IncrDay "$d")
+  done
+}
+
+################################################################################
+# Authentication                                                               #
+################################################################################
+
+# CheckAWSCredentialExpiration
+# Check if the $AWS_SESSION_EXPIRATION timestamp exists and is in the past. If so
+# set $authenticated to false
+function CheckAWSCredentialExpiration()
+{
+  if [ -n "${AWS_SESSION_EXPIRATION:-}" ]; then
+    local expiration_time_in_seconds=$(( $AWS_SESSION_EXPIRATION / 1000 ))
+    local current_time_in_seconds=$( date +%s )
+    if [ "$expiration_time_in_seconds" -le "$current_time_in_seconds" ]; then
+      authenticated=false
+      local expiration_time_str=$(TimestampMsToDateString "$AWS_SESSION_EXPIRATION")
+      VerboseEcho "AWS Credentials expired at $expiration_time_str."
+    fi
+  fi
+}
+
+# MakeAuthAPIRequest
+# Retrieve AWS credentials from Optimizely's authentication API. See:
+# https://docs.developers.optimizely.com/optimizely-data/docs/authentication-api
+function MakeAuthAPIRequest()
+{
+  if [ -z "${OPTIMIZELY_API_TOKEN:-}" ]; then
+    ErrorEcho "Error: no Optimizely API token specified."
+    ErrorEcho "An Optimizely API token may be passed via the --token command line argument, e.g."
+    ErrorEcho "  $ $CLI_NAME ls --token <token> --type decisions --date 2020-07-01"
+    ErrorEcho "...or set the OPTIMIZELY_API_TOKEN environment variable, e.g."
+    ErrorEcho "  $ export OPTIMIZELY_API_TOKEN=<token>"
+    ErrorEcho "  $ $CLI_NAME ls --type decisions --date 2020-07-01"
+    exit 1
+  fi
+
+  local auth_endpoint="https://api.optimizely.com/v2/export/credentials"
+
+  VerboseEcho "Requesting AWS credentials from $auth_endpoint"
+
+  local auth_api_response=$(curl -w "%{response_code}" -s -H "Authorization: Bearer $OPTIMIZELY_API_TOKEN" -X GET $auth_endpoint)
+
+  local auth_api_response_code="${auth_api_response:(-3)}"
+
+  if [ "$auth_api_response_code" != "200" ]; then
+    ErrorEcho "Error: received error response from Optimizely Authentication API: $auth_api_response"
+    exit 1
+  fi
+
+  local response_length="${#auth_api_response}"
+
+  auth_api_credential_str="${auth_api_response:0:((response_length-3))}"
+}
+
+# ExtractValueFromJSON
+# Extract a value from the passed json string.  The value to be extract is specified
+# by a JSON path, passed in the second parameter.
+function ExtractValueFromJSON()
+{
+  local json_str="$1"
+  local path="$2"
+
+  local val=$(echo "$json_str" | jq -r "$path")
+
+  if [[ -z "${val:-}" || "$val" == "null" ]]; then
+    ErrorEcho "Error: Unable to extract $path from $json_str"
+    exit 1
+  fi
+  
+  echo "$val"
+}
+
+# ParseAuthAPIResponse
+# Extract access key id and other important values from the Optimizely
+# Auth API request.  See:
+# https://docs.developers.optimizely.com/optimizely-data/docs/authentication-api
+function ParseAuthAPIResponse()
+{
+  local cred_str="${auth_api_credential_str:-{\}}"
+
+  # Extract AWS credentials from the JSON response.
+  # Export key id, access key, and session token variables so that they are visible to
+  # aws when invoked by this script
+  export AWS_ACCESS_KEY_ID=$(ExtractValueFromJSON "$cred_str" ".credentials.accessKeyId")
+  export AWS_SECRET_ACCESS_KEY=$(ExtractValueFromJSON "$cred_str" ".credentials.secretAccessKey")
+  export AWS_SESSION_TOKEN=$(ExtractValueFromJSON "$cred_str" ".credentials.sessionToken")
+  export AWS_SESSION_EXPIRATION=$(ExtractValueFromJSON "$cred_str" ".credentials.expiration")
+  S3_BASE_PATH=$(ExtractValueFromJSON "$cred_str" ".s3Path")
+
+  # Exit if we failed to extract any of the expected variables 
+  if [[ -z "$AWS_ACCESS_KEY_ID" || 
+        -z "$AWS_SECRET_ACCESS_KEY" ||
+        -z "$AWS_SESSION_TOKEN" ||
+        -z "$AWS_SESSION_EXPIRATION" || 
+        -z "$S3_BASE_PATH" ]]; then 
+    ErrorEcho "Error: Failed to extract one or more expected values from the Authentication API response"
+    exit 1
+  fi
+}
+
+# Authenticate
+# Retrieve AWS credentials from Optimizely's authentication API.  
+function Authenticate()
+{
+  MakeAuthAPIRequest
+  ParseAuthAPIResponse
+
+  authenticated=true
+
+  local expiration_date_str=$(TimestampMsToDateString "$AWS_SESSION_EXPIRATION")
+  VerboseEcho "Acquired AWS credentials valid until $expiration_date_str."
+  VerboseEcho "S3 base path set to $S3_BASE_PATH"
+}
+
+# EnsureAuthenticatedIfTokenPresent
+# If an Optimizely API token has been passed, use it to generate temporary AWS
+# credentials that can be used to access Enriched Event data.
+function EnsureAuthenticatedIfTokenPresent()
+{
+  if [ -n "${OPTIMIZELY_API_TOKEN:-}" ]; then
+    CheckAWSCredentialExpiration
+
+    if [ "$authenticated" = false ]; then
+      # We either haven't authenticated yet, or our credentials have expired.
+      # Authenticate using the Optimizely API token
+      Authenticate
+    fi
+  fi
+}
+
+# ExecuteAWSCLICommand
+# Execute the supplied AWS command
+function ExecuteAWSCLICommand()
+{
+  VerboseEcho "$@"
+  EnsureAuthenticatedIfTokenPresent
+  "$@"
+}
+
+################################################################################
+# S3 Prefixes and Paths                                                        #
+################################################################################
+
+# BuildS3BasePath
+# Use --account-id and --bucket parameters to construct an S3 base path if one
+# has not been already been supplied from the Optimizely Authentication API. 
+function BuildS3BasePath()
+{
+  EnsureAuthenticatedIfTokenPresent
+
+  if [ -z "${S3_BASE_PATH:-}" ]; then
+    if [[ -z "${account_id:-}" || -z "${bucket:-}" ]]; then
+      ErrorEcho "Error: Unable to construct S3 base path. Please specify an Optimizely Account ID or an Optimizely Personal Access Token"
+      exit 1
+    else
+      S3_BASE_PATH="s3://$bucket/v1/account_id=$account_id/"
+    fi
+  fi
+}
+
+# Validate type
+# Validate that the specified type is one of ["decisions", "events"]
+function ValidateType() 
+{
+  local type="$1"
+  if [[ "$type" != "decisions" && "$type" != "events" ]]; then
+    ErrorEcho "Error: specified type (\"$type\") must be one of \"decisions\" or \"events\""
+    exit 1 
+  fi
+}
+
+# BuildS3RelativePaths
+# Build S3 relative paths from passed parameters. Relative paths are stored in 
+# $s3_relative_paths
+function BuildS3RelativePaths()
+{
+  s3_relative_paths=()
+
+  if [ -z "${type:-}" ]; then
+    # type was not specified, so the only relative path we can construct is an 
+    # empty string
+    VerboseEcho "Type not specified; date range, experiment, and event params will be ignored."
+    s3_relative_paths+=("")
+    return
+  fi
+
+  ValidateType "$type"
+  ComputeDateRange
+
+  if [ ${#date_range[@]} = 0 ]; then
+    # Type was specified, but no dates were provided.
+    VerboseEcho "Valid date range not provided; experiment and event params will be ignored."
+    s3_relative_paths+=("type=$type")
+    return
+  fi
+
+  # Construct a partition string if a partition key and value were supplied
+  local partition_str=""
+  if [[ -n "${partition_key:-}" && -n "${partition_val:-}" ]]; then
+    partition_str="/$partition_key=$partition_val"
+  fi
+
+  # Build relative paths for each date in the supplied date range
+  for d in "${date_range[@]}"
+  do
+    local relative_path="type=$type/date=$d$partition_str"
+    s3_relative_paths+=("$relative_path")
+  done
+}
+
+# BuildS3AbsolutePaths
+# Build S3 absolute paths from passed parameters.  Absolute paths are stored in
+# $s3_absolute_paths
+function BuildS3AbsolutePaths()
+{
+  BuildS3BasePath
+  BuildS3RelativePaths
+  
+  s3_absolute_paths=()
+
+  for (( i=0; i<${#s3_relative_paths[@]}; ++i ))
+  do
+    local rel_path="${s3_relative_paths[i]}"
+    if [ "$rel_path" ]; then
+      # if the relative path is non-zero length, add a "/" to the end of the 
+      # absolute path
+      rel_path="$rel_path/"
+    fi
+    s3_absolute_paths+=("$S3_BASE_PATH$rel_path")
+  done
+}
+
+################################################################################
+# Commands                                                                     #
+################################################################################
+
+# HelpCommand
+# Display usage information.
+HelpCommand()
+{
+  # Display Help
+  echo "$usage"
+}
+
+# AuthCommand
+# Use the Optimizely Authentication API to acquire AWS credentials, and echo
+# those credentials to stdout.
+function AuthCommand()
+{
+  Authenticate
+
+  echo "export AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" 
+  echo "export AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY"
+  echo "export AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN"
+  echo "export AWS_SESSION_EXPIRATION=$AWS_SESSION_EXPIRATION"
+  echo "export S3_BASE_PATH=$S3_BASE_PATH"
+}
+
+# PathsCommand
+# Build and list the S3 paths specified by the supplied arguments.
+function PathsCommand()
+{
+  BuildS3AbsolutePaths
+
+  for p in "${s3_absolute_paths[@]}"; do
+    echo "$p"
+  done
+}
+
+# ListCommand
+# List all of the top-level S3 keys with prefixes specified by the 
+# supplied arguments.
+function ListCommand()
+{
+  BuildS3AbsolutePaths
+
+  for p in "${s3_absolute_paths[@]}"; do
+    ExecuteAWSCLICommand aws s3 ls --human-readable "$p"
+  done
+}
+
+# LoadCommand
+# Use aws s3 sync to download all s3 objects with prefixes specified
+# by the supplied arguments.
+function LoadCommand() 
+{
+  BuildS3AbsolutePaths
+
+  for (( i=0; i<"${#s3_absolute_paths[@]}"; ++i ))
+  do
+    local rel_path="${s3_relative_paths[i]}"
+    local abs_path="${s3_absolute_paths[i]}"
+    local output_path="$outputdir/$rel_path"
+    mkdir -p "$output_path"
+    ExecuteAWSCLICommand aws s3 sync "$abs_path" "$output_path"
+  done
+}
+
+################################################################################
+# Main                                                                         #
+################################################################################
+
+# Check prerequisites
+
+Require "aws"
+Require "jq"
+Require "date"
+Require "curl"
+
+# Set default global variable values
+bucket="optimizely-events-data"
+authenticated=false
+outputdir="$(pwd)"
+verbose=false
+cmd="help"
+
+# Parse command line arguments
+while (( "$#" )); do
+  case "$1" in
+    help)
+      cmd="help"
+      shift
+      ;;
+    auth)
+      cmd="auth"
+      shift
+      ;;
+    paths)
+      cmd="paths"
+      shift
+      ;;
+    ls)
+      cmd="ls"
+      shift
+      ;;
+    load)
+      cmd="load"
+      shift
+      ;;
+    --verbose)
+      verbose=true
+      shift
+      ;;
+    --bucket)
+      bucket="$2"
+      shift
+      shift
+      ;;
+    --account-id)
+      account_id="$2"
+      shift
+      shift
+      ;;
+    --token)
+      OPTIMIZELY_API_TOKEN="$2"
+      shift
+      shift
+      ;;
+    --type)
+      type="$2"
+      shift
+      shift
+      ;;
+    --date)
+      start="$2"
+      shift
+      shift
+      ;;
+    --start)
+      start="$2"
+      shift
+      shift
+      ;;
+    --end)
+      end="$2"
+      shift
+      shift
+      ;;
+    --experiment)
+      partition_key="experiment"
+      partition_val="$2"
+      shift
+      shift
+      ;; 
+    --event)
+      partition_key="event"
+      partition_val="$2"
+      shift
+      shift
+      ;;
+    --output)
+      outputdir="$2"
+      shift
+      shift
+      ;;
+    *)
+      echo "Error: command $1 not recognized."
+      echo
+      HelpCommand
+      exit 1
+  esac
+done
+
+case "$cmd" in
+  help)
+    HelpCommand
+    ;;
+  auth)
+    AuthCommand
+    ;;
+  paths)
+    PathsCommand
+    ;;
+  ls)
+    ListCommand
+    ;;
+  load)
+    LoadCommand
+    ;;
+  *)
+    echo "Error: command $cmd not recognized."
+    HelpCommand
+    exit 1
+esac
