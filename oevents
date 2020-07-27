@@ -35,7 +35,8 @@ args:
     --end <YYYY-MM-DD>            Last date in your specified range. 
     --experiment <experiment_id>  An Optimizely experiment ID (only used if type=decisions)
     --event <event>               An Optimizely event name (only used if type=events)
-    --output <output directory>   Output directory for the load command. Defaults to your working directory. (optional)
+    --output <output directory>   Output directory for the load command. May also be passed via the
+                                  OPTIMIZELY_DATA_DIR environment variable. Defaults to your working directory.
 
 ## Authentication:
 
@@ -460,7 +461,7 @@ build_s3_relative_paths() {
   fi
 
   # Build relative paths for each date in the supplied date range
-  for d in ${DATE_RANGE[@]}; do
+  for d in "${DATE_RANGE[@]}"; do
     local relative_path="type=$type/date=$d$partition_str"
     S3_RELATIVE_PATHS+=("$relative_path")
   done
@@ -538,10 +539,14 @@ list_command() {
 load_command() {
   build_s3_absolute_paths
 
+  if [[ -z ${OPTIMIZELY_DATA_DIR:-} ]]; then
+    OPTIMIZELY_DATA_DIR="$(pwd)"
+  fi
+
   for (( i=0; i<"${#S3_ABSOLUTE_PATHS[@]}"; ++i )); do
     local rel_path="${S3_RELATIVE_PATHS[i]}"
     local abs_path="${S3_ABSOLUTE_PATHS[i]}"
-    local output_path="$OUTPUT_DIR/$rel_path"
+    local output_path="$OPTIMIZELY_DATA_DIR/$rel_path"
     mkdir -p "$output_path"
     execute_aws_cli_cmd aws s3 sync "$abs_path" "$output_path"
   done
@@ -554,7 +559,6 @@ load_command() {
 # Set default global variable values
 REQUIREMENTS=( "aws" "curl" "date" "jq" "uname" )
 BUCKET=optimizely-events-data
-OUTPUT_DIR="$(pwd)"
 VERBOSE=false
 CMD=help
 
@@ -633,7 +637,7 @@ while (( "$#" )); do
       shift
       ;;
     --output)
-      OUTPUT_DIR="$2"
+      OPTIMIZELY_DATA_DIR="$2"
       shift
       shift
       ;;
