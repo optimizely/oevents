@@ -9,7 +9,7 @@ For more information, see the Enriched Events [data specification](https://docs.
 
 This Lab contains `oevents`, a simple CLI tool for loading enriched event data.
 
-![oevents demo](https://raw.githubusercontent.com/optimizely/labs/master/labs/optimizely-data-cli/img/demo.gif)
+![oevents demo](./img/demo.gif)
 
 ## Prerequisites: bash (v4+), date, jq, curl, and aws
 
@@ -21,7 +21,7 @@ This Lab contains `oevents`, a simple CLI tool for loading enriched event data.
 
 ## Downloading `oevents`
 
-You can download a zipped directory containing the `oevents` CLI [here](https://library.optimizely.com/labs/artifacts/optimizely-data-cli/optimizely-data-cli.zip).
+You can download a zipped directory containing the `oevents` CLI [from this repo](https://github.com/optimizely/oevents/archive/master.zip) or you can download just the shell script [here](https://library.optimizely.com/data/oevents/v0.0.1/oevents)
 
 `oevents` lives in the  [Optimizely Labs Github repository](https://github.com/optimizely/labs/tree/master/labs/optimizely-data-cli).  You can also access it by cloning the repository or downloading the `oevents` script directly from the Github web interface.
 
