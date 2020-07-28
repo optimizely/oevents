@@ -117,39 +117,46 @@ $ oevents ls --type events --date 2020-05-10
 
 You can use `oevents load` to download your Enriched Event data in [Apache Parquet](https://parquet.apache.org/) format.  Command line arguments can be used to specify a progressively narrower subset of your data.
 
-The following command will download *all* enriched event data associated with your Optimizely account:
+The following command will download *all* enriched event data associated with your Optimizely account.  Data will be downloaded into the current working directory. You can configure the destination using the `--output` command line argument or the `OPTIMIZELY_DATA_DIR` environment variable.
 
 ```sh
-$ oevents load --output ~/optimizely_data
+$ oevents load
 ```
 
-This will download all [decision](decisions) data associated with your Optimizely account:
+Use the `--type` argument to specify [decisions] or [events][conversions]  The following will download all [decision][decisions] data associated with your Optimizely account:
+
+```sh
+$ oevents load \
+    --type decisions
+```
+
+The following will download all [decision][decisions] data collected between July 1st and 5th, 2020 (inclusive):
 
 ```sh
 $ oevents load \
     --type decisions \
-    --output ~/optimizely_data
+    --start 2020-07-01 \
+    --end 2020-07-05
 ```
 
-This will download all [decision](decisions) data collected between July 1st and 5th, 2020:
+The following will download all [decision][decisions] data for experiment `12345` collected between July 1st and 5th, 2020:
 
 ```sh
 $ oevents load \
     --type decisions \
     --start 2020-07-01 \
     --end 2020-07-05 \
-    --output ~/optimizely_data
+    --experiment 12345
 ```
 
-This will download all [decision](decisions) data for experiment `12345` collected between July 1st and 5th, 2020:
+The following will download all [conversion][conversions] data for event `add_to_cart` collected between July 1st and 5th, 2020:
 
 ```sh
 $ oevents load \
-    --type decisions \
+    --type events \
     --start 2020-07-01 \
     --end 2020-07-05 \
-    --experiment 12345 \
-    --output ~/optimizely_data
+    --event add_to_cart
 ```
 
 ## Testing `oevents`
