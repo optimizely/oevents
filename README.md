@@ -1,4 +1,4 @@
-# Accessing Optimizely Enriched Event Data
+# oevents: A CLI for Optimizely Enriched Event data
 
 Optimizely [Enriched Events Export](https://docs.developers.optimizely.com/optimizely-data/docs/enriched-events-export) gives you secure access to your Optimizely event data so you can analyze your experiment results with greater flexibility. The export includes a useful combination of events attributes:
 
