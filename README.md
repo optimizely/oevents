@@ -21,7 +21,7 @@ This repo contains `oevents`, a simple CLI tool for loading enriched event data.
 
 ## Downloading `oevents`
 
-You can download a zipped directory containing the `oevents` CLI [from this repo](https://github.com/optimizely/oevents/archive/master.zip) or you can download just the shell script [here](https://library.optimizely.com/data/oevents/v0.0.2/oevents)
+You can download a zipped directory containing the `oevents` CLI [from this repo](https://github.com/optimizely/oevents/archive/master.zip) or you can download just the shell script [here](https://library.optimizely.com/data/oevents/latest/oevents)
 
 ## Installation 
 
