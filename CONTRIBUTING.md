@@ -10,7 +10,7 @@ We welcome contributions and feedback! All contributors must sign our [Contribut
 4. Ensure tests are passing after running by installing [BATS](https://github.com/bats-core/bats-core) and running `test.bats` in this directory of the repository.
 5. Push a branch with your changes to GitHub.
 6. Open a PR from your fork into the master branch of the original repo
-9. A repository maintainer will review your pull request and, if all goes well, squash and merge it!
+7. A repository maintainer will review your pull request and, if all goes well, squash and merge it!
 
 ## Pull request acceptance criteria
 
