@@ -166,7 +166,7 @@ You can run the `oevents` test suite by installing [BATS](https://github.com/bat
 
 ## Additional Code
 
-This software incorporates code from the following open source projects:
+This software depends on code from the following open source projects:
 
 **aws-cli**
 Copyright (c) 2012-2020 Amazon.com, Inc. or its affiliates.
