@@ -1,19 +1,20 @@
-# Contributing to oevents
+# Contributing to the Optimizely oevents Command Line Tool
 
 We welcome contributions and feedback! All contributors must sign our [Contributor License Agreement (CLA)](https://docs.google.com/a/optimizely.com/forms/d/e/1FAIpQLSf9cbouWptIpMgukAKZZOIAhafvjFCV8hS00XJLWQnWDFtwtA/viewform) to be eligible to contribute. Please read the [README](README.md) to set up your development environment, then read the guidelines below for information on submitting your code.
 
 ## Development process
 
 1. Fork the repository and create your branch from master.
-2. Please follow these [commit message guidelines](https://github.com/angular/angular/blob/master/CONTRIBUTING.md#-commit-message-guidelines) for each commit message. 
+2. Please follow the [commit message guidelines](https://github.com/angular/angular/blob/master/CONTRIBUTING.md#-commit-message-guidelines) for each commit message. 
 3. Make sure to add tests!
-4. Push a branch with your changes to GitHub.
-5. Open a PR from your fork into the master branch of the original repo
-6. A repository maintainer will review your pull request and, if all goes well, squash and merge it!
+4. Ensure tests are passing after running by installing [BATS](https://github.com/bats-core/bats-core) and running `test.bats` in this directory of the repository.
+5. Push a branch with your changes to GitHub.
+6. Open a PR from your fork into the master branch of the original repo
+7. A repository maintainer will review your pull request and, if all goes well, squash and merge it!
 
 ## Pull request acceptance criteria
 
-**All code must have test coverage.** Changes in functionality should have accompanying unit tests. Bug fixes should have accompanying regression tests.
+**All code must have test coverage.** Changes in functionality should have accompanying tests. Bug fixes should have accompanying regression tests.
 
 ## License
 
