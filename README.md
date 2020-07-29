@@ -162,3 +162,21 @@ $ oevents load \
 ## Testing `oevents`
 
 You can run the `oevents` test suite by installing [BATS](https://github.com/bats-core/bats-core) and running `test.bats` in this directory.  Note: the `oevents` test suite requires bash v4.4+.
+
+
+## Acknowledgements
+
+This software depends on code from the following wonderful open source projects:
+
+#### aws-cli
+Copyright (c) 2012-2020 Amazon.com, Inc. or its affiliates.
+[License (Apache 2.0)](https://github.com/aws/aws-cli/blob/develop/LICENSE.txt)
+
+#### jq
+Copyright (c) 2012 Stephen Dolan.
+[License (MIT)](https://github.com/stedolan/jq/blob/master/COPYING)
+
+#### curl
+Copyright (c) 1996 - 2020, Daniel Stenberg, daniel@haxx.se, and many
+contributors.
+[License (MIT)](https://github.com/curl/curl/blob/master/COPYING)
